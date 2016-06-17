@@ -42,8 +42,8 @@ public class MemCacheServerTest
 
     protected static final int TWO_WEEKS = 1209600; // 60*60*24*14 = 1209600 seconds in 2 weeks.
 
-    public MemCacheServerTest(CacheType cacheType, int blockSize, ProtocolMode protocolMode) {
-        super(cacheType, blockSize, protocolMode);
+    public MemCacheServerTest(ProtocolMode protocolMode) {
+        super(protocolMode);
     }
 
     @Before
