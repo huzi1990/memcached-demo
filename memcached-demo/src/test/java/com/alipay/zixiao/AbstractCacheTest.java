@@ -6,9 +6,6 @@ import com.alipay.zixiao.cache.Key;
 import com.alipay.zixiao.cache.LocalCacheElement;
 import com.alipay.zixiao.cache.hash.ConcurrentLinkedHashMap;
 import com.alipay.zixiao.cache.storage.CacheStorage;
-import com.alipay.zixiao.cache.storage.MemoryMappedBlockStore;
-import com.alipay.zixiao.cache.storage.bytebuffer.BlockStorageCacheStorage;
-import com.alipay.zixiao.cache.storage.bytebuffer.ByteBufferBlockStore;
 import com.alipay.zixiao.util.Bytes;
 import org.junit.After;
 import org.junit.Before;
@@ -28,20 +25,14 @@ public abstract class AbstractCacheTest {
     protected       MemCacheServer<LocalCacheElement> daemon;
     private         int                               port;
     protected       Cache<LocalCacheElement>          cache;
-    protected final CacheType                         cacheType;
-    protected final int                               blockSize;
     private final   ProtocolMode                      protocolMode;
 
-    public AbstractCacheTest(CacheType cacheType, int blockSize, ProtocolMode protocolMode) {
-        this.blockSize = blockSize;
-        this.cacheType = cacheType;
+    public AbstractCacheTest( ProtocolMode protocolMode) {
         this.protocolMode = protocolMode;
     }
 
 
-    public static enum CacheType {
-        LOCAL_HASH, BLOCK, MAPPED
-    }
+
 
     public static enum ProtocolMode {
         TEXT, BINARY
@@ -50,12 +41,12 @@ public abstract class AbstractCacheTest {
     @Parameterized.Parameters
     public static Collection blockSizeValues() {
         return Arrays.asList(new Object[][] {
-                { CacheType.LOCAL_HASH, 1, ProtocolMode.TEXT },
-                { CacheType.LOCAL_HASH, 1, ProtocolMode.BINARY },
-                { CacheType.BLOCK, 4, ProtocolMode.TEXT},
-                { CacheType.BLOCK, 4, ProtocolMode.BINARY},
-                { CacheType.MAPPED, 4, ProtocolMode.TEXT},
-                { CacheType.MAPPED, 4, ProtocolMode.BINARY }
+                {  ProtocolMode.TEXT },
+                {  ProtocolMode.BINARY },
+//                { CacheType.BLOCK, 4, ProtocolMode.TEXT},
+//                { CacheType.BLOCK, 4, ProtocolMode.BINARY},
+//                { CacheType.MAPPED, 4, ProtocolMode.TEXT},
+//                { CacheType.MAPPED, 4, ProtocolMode.BINARY }
         });
     }
 
@@ -63,7 +54,8 @@ public abstract class AbstractCacheTest {
     public void setup() throws IOException {
         // create daemon and start it
         daemon = new MemCacheServer<LocalCacheElement>();
-        CacheStorage<Key, LocalCacheElement> cacheStorage = getCacheStorage();
+        CacheStorage<Key, LocalCacheElement> cacheStorage = ConcurrentLinkedHashMap
+                .create(ConcurrentLinkedHashMap.EvictionPolicy.FIFO, MAX_SIZE, MAX_BYTES);
 
         daemon.setCache(new CacheImpl(cacheStorage));
         daemon.setBinary(protocolMode == ProtocolMode.BINARY);
@@ -83,24 +75,7 @@ public abstract class AbstractCacheTest {
             daemon.stop();
     }
 
-    private CacheStorage<Key, LocalCacheElement> getCacheStorage() throws IOException {
-        CacheStorage<Key, LocalCacheElement> cacheStorage = null;
-        switch (cacheType) {
-            case LOCAL_HASH:
-                cacheStorage = ConcurrentLinkedHashMap
-                        .create(ConcurrentLinkedHashMap.EvictionPolicy.FIFO, MAX_SIZE, MAX_BYTES);
-                break;
-            case BLOCK:
-                cacheStorage = new BlockStorageCacheStorage(16, CEILING_SIZE, blockSize, MAX_BYTES, MAX_SIZE, new ByteBufferBlockStore.ByteBufferBlockStoreFactory());
-                break;
-            case MAPPED:
-                cacheStorage = new BlockStorageCacheStorage(16, CEILING_SIZE, blockSize, MAX_BYTES, MAX_SIZE, MemoryMappedBlockStore
-                        .getFactory());
 
-                break;
-        }
-        return cacheStorage;
-    }
 
     public MemCacheServer getDaemon() {
         return daemon;
@@ -110,13 +85,6 @@ public abstract class AbstractCacheTest {
         return cache;
     }
 
-    public CacheType getCacheType() {
-        return cacheType;
-    }
-
-    public int getBlockSize() {
-        return blockSize;
-    }
 
     public ProtocolMode getProtocolMode() {
         return protocolMode;
