@@ -106,7 +106,11 @@ public class MemCacheServerTest extends AbstractCacheTest {
         Future<Boolean> future = singleClient.set(KEY, TWO_WEEKS, VALUE);
         assertTrue(future.get());
         assertEquals(VALUE, singleClient.get(KEY));
+
+
     }
+
+
 
 
 
@@ -229,12 +233,11 @@ public class MemCacheServerTest extends AbstractCacheTest {
             }
         });
 
-//        thread1.start();
-//        thread2.start();
-        thread1.run();
-        thread2.run();
+        thread1.start();
+        thread2.start();
 
-        Thread.sleep(2000);
+
+        Thread.sleep(1000);
         assertEquals(VALUE,expectValue);
 
     }

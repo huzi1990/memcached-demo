@@ -41,7 +41,7 @@ public abstract class AbstractCacheTest {
     public static Collection blockSizeValues() {
         return Arrays.asList(new Object[][] {
                 {  ProtocolMode.TEXT },
-//                {  ProtocolMode.BINARY }
+                {  ProtocolMode.BINARY }
 
         });
     }
