@@ -20,7 +20,7 @@ import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 
 /**
- * Represents information about a cache entry.
+ * 缓存的VALUE对象
  */
 public final class LocalCacheElement implements CacheElement {
     private long expire ;

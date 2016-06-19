@@ -12,11 +12,7 @@ import org.jboss.netty.channel.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-import java.util.Set;
-
 import static com.alipay.zixiao.protocol.text.MemcachedPipelineFactory.USASCII;
-import static java.lang.String.valueOf;
 
 /**
  * Response encoder for the memcached text protocol. Produces strings destined for the StringEncoder
@@ -98,11 +94,7 @@ public final class MemcachedResponseEncoder<CACHE_ELEMENT extends CacheElement> 
 
                 Channels.write(channel, ChannelBuffers.wrappedBuffer(buffers));
                 break;
-            case APPEND:
-            case PREPEND:
-            case ADD:
             case SET:
-            case REPLACE:
             case CAS:
                 if (!command.cmd.noreply)
                     Channels.write(channel, storeResponse(command.response));
@@ -112,42 +104,7 @@ public final class MemcachedResponseEncoder<CACHE_ELEMENT extends CacheElement> 
                     Channels.write(channel, deleteResponseString(command.deleteResponse));
 
                 break;
-            case DECR:
-            case INCR:
-                if (!command.cmd.noreply)
-                    Channels.write(channel, incrDecrResponseString(command.incrDecrResponse));
-                break;
-            case STATS:
-                for (Map.Entry<String, Set<String>> stat : command.stats.entrySet()) {
-                    for (String statVal : stat.getValue()) {
-                        StringBuilder builder = new StringBuilder();
-                        builder.append("STAT ");
-                        builder.append(stat.getKey());
-                        builder.append(" ");
-                        builder.append(String.valueOf(statVal));
-                        builder.append("\r\n");
-                        Channels.write(channel, ChannelBuffers.copiedBuffer(builder.toString(), USASCII));
-                    }
-                }
-                Channels.write(channel, END.duplicate());
 
-                break;
-            case VERSION:
-                Channels.write(channel, ChannelBuffers.copiedBuffer("VERSION " + command.version + "\r\n", USASCII));
-                break;
-            case QUIT:
-                Channels.disconnect(channel);
-
-                break;
-            case FLUSH_ALL:
-                if (!command.cmd.noreply) {
-                    ChannelBuffer ret = command.flushSuccess ? OK.duplicate() : ERROR.duplicate();
-
-                    Channels.write(channel, ret);
-                }
-                break;
-            case VERBOSITY:
-                break;
             default:
                 Channels.write(channel, ERROR.duplicate());
                 logger.error("error; unrecognized command: " + cmd);
@@ -161,13 +118,6 @@ public final class MemcachedResponseEncoder<CACHE_ELEMENT extends CacheElement> 
         else return NOT_FOUND.duplicate();
     }
 
-
-    private ChannelBuffer incrDecrResponseString(Integer ret) {
-        if (ret == null)
-            return NOT_FOUND.duplicate();
-        else
-            return ChannelBuffers.copiedBuffer(valueOf(ret) + "\r\n", USASCII);
-    }
 
     /**
      * Find the string response message which is equivalent to a response to a set/add/replace message

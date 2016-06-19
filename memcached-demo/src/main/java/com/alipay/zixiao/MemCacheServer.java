@@ -18,7 +18,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
 
-
+/**
+ * 服务端实现
+ * @param <CACHE_ELEMENT>
+ */
 public class MemCacheServer <CACHE_ELEMENT extends CacheElement>
 {
 
@@ -47,7 +50,7 @@ public class MemCacheServer <CACHE_ELEMENT extends CacheElement>
     }
 
     /**
-     * Bind the network connection and start the network processing threads.
+     * 开炮
      */
     public void start() {
         // TODO provide tweakable options here for passing in custom executors.
@@ -56,7 +59,7 @@ public class MemCacheServer <CACHE_ELEMENT extends CacheElement>
                         Executors.newCachedThreadPool(),
                         Executors.newCachedThreadPool());
 
-        allChannels = new DefaultChannelGroup("jmemcachedChannelGroup");
+        allChannels = new DefaultChannelGroup("memcachedChannelGroup");
 
         ServerBootstrap bootstrap = new ServerBootstrap(channelFactory);
 
@@ -89,14 +92,12 @@ public class MemCacheServer <CACHE_ELEMENT extends CacheElement>
     }
 
     public void stop() {
-        log.info("terminating daemon; closing all channels");
 
         ChannelGroupFuture future = allChannels.close();
         future.awaitUninterruptibly();
         if (!future.isCompleteSuccess()) {
             throw new RuntimeException("failure to complete closing all network channels");
         }
-        log.info("channels closed, freeing cache storage");
         try {
             cache.close();
         } catch (IOException e) {
@@ -105,7 +106,6 @@ public class MemCacheServer <CACHE_ELEMENT extends CacheElement>
         channelFactory.releaseExternalResources();
 
         running = false;
-        log.info("successfully shut down");
     }
 
     public void setVerbose(boolean verbose) {

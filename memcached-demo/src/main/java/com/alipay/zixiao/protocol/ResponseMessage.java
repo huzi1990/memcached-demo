@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Represents the response to a command.
+ * 响应信息
  */
 public final class ResponseMessage<CACHE_ELEMENT extends CacheElement> implements Serializable {
 

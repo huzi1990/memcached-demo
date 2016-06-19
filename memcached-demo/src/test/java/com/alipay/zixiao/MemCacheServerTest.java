@@ -6,205 +6,251 @@ import net.spy.memcached.CASValue;
 import net.spy.memcached.MemcachedClient;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.ComparisonFailure;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
- * Unit test for simple MemCacheServer.
+ * 使用spymemcached进行测试
  */
 @RunWith(Parameterized.class)
-public class MemCacheServerTest
-    extends AbstractCacheTest
-{
+public class MemCacheServerTest extends AbstractCacheTest {
 
-
-
-
-    private MemcachedClient   _client;
+    /**
+     * 单线程
+     */
+    private MemcachedClient   singleClient;
     private InetSocketAddress address;
+    /**
+     * 多线程读线程1
+     */
+    private MemcachedClient   multiClient1;
+
+    /**
+     * 多线程读线程2
+     */
+    private MemcachedClient   multiClient2;
+
+    /**
+     * 多线程通信cas
+     */
+    private long cas;
+    /**
+     * 期望值
+     */
+    private String expectValue=VALUE;
+
+    /**
+     * 线程通信
+     */
+    private boolean isOk=false;
+
 
     protected static final String KEY = "MyKey";
 
-    protected static final int TWO_WEEKS = 1209600; // 60*60*24*14 = 1209600 seconds in 2 weeks.
+    protected static final String VALUE = "MyValue";
+
+    protected static final int TWO_WEEKS = 1209600; // 60*60*24*14 = 1209600
 
     public MemCacheServerTest(ProtocolMode protocolMode) {
         super(protocolMode);
     }
 
-    @Before
-    public void setUp() throws Exception {
+    @Before public void setUp() throws Exception {
         super.setup();
 
         this.address = new InetSocketAddress("localhost", getPort());
-        if (getProtocolMode() == ProtocolMode.BINARY)
-            _client = new MemcachedClient( new BinaryConnectionFactory(), Arrays.asList( address ) );
-        else
-            _client = new MemcachedClient( Arrays.asList( address ) );
+        if (getProtocolMode() == ProtocolMode.BINARY) {
+            singleClient = new MemcachedClient(new BinaryConnectionFactory(),
+                    Arrays.asList(address));
+            multiClient1 = new MemcachedClient(new BinaryConnectionFactory(), Arrays.asList(address));
+            multiClient2 = new MemcachedClient(new BinaryConnectionFactory(), Arrays.asList(address));
+        }
+        else {
+            singleClient = new MemcachedClient(Arrays.asList(address));
+            multiClient1 = new MemcachedClient( Arrays.asList(address));
+            multiClient2 = new MemcachedClient( Arrays.asList(address));
+
+        }
     }
 
-    @After
-    public void tearDown() throws Exception {
-        if (_client != null)
-            _client.shutdown();
+    @After public void tearDown() throws Exception {
+        if (singleClient != null)
+            singleClient.shutdown();
+        if(multiClient1 != null){
+            multiClient1.shutdown();
+        }
+        if(multiClient2 != null){
+            multiClient2.shutdown();
+        }
+
     }
 
-
+    /**
+     *  测试正常的get与set 存储 String类型
+     */
     @Test
     public void testGetSet() throws IOException, InterruptedException, ExecutionException {
-        Future<Boolean> future = _client.set("foo", 5000, "bar");
+        Future<Boolean> future = singleClient.set(KEY, TWO_WEEKS, VALUE);
         assertTrue(future.get());
-        assertEquals( "bar", _client.get( "foo" ) );
+        assertEquals(VALUE, singleClient.get(KEY));
     }
 
-    @Test
-    public void testIncrDecr() throws ExecutionException, InterruptedException {
-        Future<Boolean> future = _client.set("foo", 0, "1");
-        assertTrue(future.get());
-        assertEquals( "1", _client.get( "foo" ) );
-        _client.incr( "foo", 5 );
-        assertEquals( "6", _client.get( "foo" ) );
-        _client.decr( "foo", 10 );
-        assertEquals( "0", _client.get( "foo" ) );
-    }
 
-    @Test
-    public void testPresence() {
-        assertEquals("initial cache is empty", 0, getDaemon().getCache().getCurrentItems());
-        assertEquals("initialize size is empty", 0, getDaemon().getCache().getCurrentBytes());
-    }
 
-    @Test
-    public void testStats() throws ExecutionException, InterruptedException {
-        Map<SocketAddress, Map<String, String>> stats = _client.getStats();
-        Map<String, String> statsMap = stats.get(address);
-        assertNotNull(statsMap);
-        assertEquals("0", statsMap.get("cmd_gets"));
-        assertEquals("0", statsMap.get("cmd_sets"));
-        Future<Boolean> future = _client.set("foo", 86400, "bar");
-        assertTrue(future.get());
-        _client.get("foo");
-        _client.get("bug");
-        stats = _client.getStats();
-        statsMap = stats.get(address);
-        assertEquals("2", statsMap.get("cmd_gets"));
-        assertEquals("1", statsMap.get("cmd_sets"));
-    }
-
-    @Test
-    public void testBinaryCompressed() throws ExecutionException, InterruptedException {
-        Future<Boolean> future = _client.add("foo", 86400, "foobarshoe");
-        assertEquals(true, future.get());
-        assertEquals("wrong value returned from cache", "foobarshoe",  _client.get("foo"));
-        StringBuilder sb = new StringBuilder();
-        sb.append("hello world");
-        for(int i=0; i<15; i++){
-            sb.append(sb);
-        }
-        _client.add("sb", 86400, sb.toString());
-        assertNotNull("null get when sb.length()="+sb.length(), _client.get("sb"));
-        assertEquals("wrong length for sb",sb.length(), _client.get("sb").toString().length());
-    }
-
+    /**
+     *  测试JAVA POJO对象
+     */
     @Test
     @SuppressWarnings("unchecked")
-    public void testBigBinaryObject() throws ExecutionException, InterruptedException {
-        Object bigObject = getBigObject();
-        Future<Boolean> future = _client.set(KEY, TWO_WEEKS, bigObject);
+    public void testPOJOObject()
+            throws ExecutionException, InterruptedException {
+
+        User user = new User("zixiao", 26);
+
+        Future<Boolean> future = singleClient.set(KEY, TWO_WEEKS, user);
         assertTrue(future.get());
-        final Map<String, Double> map = (Map<String, Double>)_client.get(KEY);
-        for (String key : map.keySet()) {
-            Integer kint = Integer.valueOf(key);
-            Double val = map.get(key);
-            assertEquals(val, kint/42.0, 0.0);
-        }
+        User userValue = (User) singleClient.get(KEY);
+        assertEquals("zixiao", userValue.getName());
+        assertEquals(26, userValue.getAge());
+
+
     }
 
+    /**
+     *  测试多线程读取
+     *  1.一个线程存储,两个线程读取
+     *  2.两个线程存储同一个key
+     *  3.一个线程存储,另一个线程读取
+     */
     @Test
-    public void testCAS() throws Exception {
-        Future<Boolean> future = _client.set("foo", 32000, 123);
-        assertTrue(future.get());
-        CASValue<Object> casValue = _client.gets("foo");
-        assertEquals( 123, casValue.getValue());
+    public void testMultiThreadRead () throws Exception{
 
-        CASResponse cr = _client.cas("foo", casValue.getCas(), 456);
 
-        assertEquals(CASResponse.OK, cr);
-
-        Future<Object> rf = _client.asyncGet("foo");
-
-        assertEquals(456, rf.get());
-    }
-
-    @Test
-    public void testCASAfterAdd() throws Exception {
-        Future<Boolean> future = _client.add("foo", 32000, 123);
-        assertTrue(future.get());
-        CASValue<Object> casValue = _client.gets("foo"); // should not produce an error
-        assertEquals( 123, casValue.getValue());
-    }
-
-    @Test
-    public void testAppendPrepend() throws Exception {
-        Future<Boolean> future = _client.set("foo", 0, "foo");
+        Future<Boolean> future = singleClient.set(KEY, TWO_WEEKS, VALUE);
         assertTrue(future.get());
 
-        _client.append(0, "foo", "bar");
-        assertEquals( "foobar", _client.get( "foo" ));
-        _client.prepend(0, "foo", "baz");
-        assertEquals( "bazfoobar", _client.get( "foo" ));
+
+        Thread readThread1 = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    assertEquals(VALUE, multiClient1.get(KEY));
+                }
+                //通过捕获线程内异常来判断测试用例是否真正通过
+                catch (ComparisonFailure cf){
+                    expectValue = "wrong";
+                }
+
+            }
+        });
+        Thread readThread2 = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    assertEquals(VALUE, multiClient2.get(KEY));
+                }
+                //通过捕获线程内异常来判断测试用例是否真正通过
+                catch (ComparisonFailure cf){
+                    expectValue = "wrong";
+                }
+            }
+        });
+
+        readThread1.start();
+        readThread2.start();
+
+        Thread.sleep(1000);
+        assertEquals(VALUE,expectValue);
+
+
     }
 
+    /**
+     * 测试多线程写入
+     * @throws Exception
+     */
     @Test
-    public void testBulkGet() throws IOException, InterruptedException, ExecutionException,
-                                     TimeoutException {
-        ArrayList<String> allStrings = new ArrayList<String>();
-        ArrayList<Future<Boolean>> futures = new ArrayList<Future<Boolean>>();
-        for (int i = 0; i < 500; i++) {
-            futures.add(_client.set("foo" + i, 360000, "bar" + i));
-            allStrings.add("foo" + i);
-        }
+    public void testMultiThreadWrite () throws Exception{
 
-        // wait for all the sets to complete
-        for (Future<Boolean> future : futures) {
-            assertTrue(future.get(5, TimeUnit.SECONDS));
-        }
 
-        // doing a regular get, we are just too slow for spymemcached's tolerances... for now
-        Future<Map<String, Object>> future = _client.asyncGetBulk(allStrings);
-        Map<String, Object> results = future.get();
+        Future<Boolean> future = singleClient.set(KEY, TWO_WEEKS, VALUE);
+        assertTrue(future.get());
 
-        for (int i = 0; i < 500; i++) {
-            assertEquals("bar" + i, results.get("foo" + i));
-        }
+        Thread thread1 = new Thread(new Runnable() {
+            public void run() {
+
+
+                    try {
+                        CASValue<Object> casValue = multiClient1.gets(KEY);
+                        assertEquals(casValue.getValue(), VALUE);
+                        cas = casValue.getCas();
+                        CASResponse casResponse = multiClient1.cas(KEY, cas, TWO_WEEKS, VALUE);
+                        isOk = true;
+                        assertEquals(CASResponse.OK, casResponse);
+                    }
+                    //通过捕获线程内错误来判断测试用例是否真正通过
+                    catch (Error error) {
+                        error.printStackTrace();
+                        expectValue = "wrong";
+                    }
+
+
+            }
+        });
+        final Thread thread2 = new Thread(new Runnable() {
+            public void run() {
+
+
+                    try {
+                        //取更新线程1已经更新的值
+                        while (!isOk){
+                        }
+                        CASResponse casResponse = multiClient2.cas(KEY, cas, TWO_WEEKS, VALUE);
+                        assertEquals(CASResponse.EXISTS, casResponse);
+                    }//通过捕获线程内错误来判断测试用例是否真正通过
+                    catch (Error error) {
+                        error.printStackTrace();
+                        expectValue = "wrong";
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+            }
+        });
+
+//        thread1.start();
+//        thread2.start();
+        thread1.run();
+        thread2.run();
+
+        Thread.sleep(2000);
+        assertEquals(VALUE,expectValue);
 
     }
+
+
+
+
 
     protected static Object getBigObject() {
         final Map<String, Double> map = new HashMap<String, Double>();
 
-        for (int i=0;i<13000;i++) {
-            map.put(Integer.toString(i), i/42.0);
+        for (int i = 0; i < 13000; i++) {
+            map.put(Integer.toString(i), i / 42.0);
         }
 
         return map;
     }
-
-
-
 
 }

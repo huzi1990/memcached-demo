@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-
 @ChannelHandler.Sharable
 public final class MemcachedCommandHandler<CACHE_ELEMENT extends CacheElement> extends SimpleChannelUpstreamHandler {
 
@@ -35,12 +34,7 @@ public final class MemcachedCommandHandler<CACHE_ELEMENT extends CacheElement> e
     public final AtomicInteger curr_conns = new AtomicInteger();
     public final AtomicInteger total_conns = new AtomicInteger();
 
-    /**
-     * The following state variables are universal for the entire daemon. These are used for statistics gathering.
-     * In order for these values to work properly, the handler _must_ be declared with a ChannelPipelineCoverage
-     * of "all".
-     */
-    public final String version;
+
 
     public final int idle_limit;
     public final boolean verbose;
@@ -59,17 +53,14 @@ public final class MemcachedCommandHandler<CACHE_ELEMENT extends CacheElement> e
 
     /**
      * Construct the server session handler
-     *
-     * @param cache            the cache to use
-     * @param memcachedVersion the version string to return to clients
+     *  @param cache            the cache to use
      * @param verbosity        verbosity level for debugging
      * @param idle             how long sessions can be idle for
      * @param channelGroup
      */
-    public MemcachedCommandHandler(Cache cache, String memcachedVersion, boolean verbosity, int idle, DefaultChannelGroup channelGroup) {
+    public MemcachedCommandHandler(Cache cache, boolean verbosity, int idle, DefaultChannelGroup channelGroup) {
         this.cache = cache;
 
-        version = memcachedVersion;
         verbose = verbosity;
         idle_limit = idle;
         this.channelGroup = channelGroup;
@@ -150,47 +141,14 @@ public final class MemcachedCommandHandler<CACHE_ELEMENT extends CacheElement> e
             case GETS:
                 handleGets(channelHandlerContext, command, channel);
                 break;
-            case APPEND:
-                handleAppend(channelHandlerContext, command, channel);
-                break;
-            case PREPEND:
-                handlePrepend(channelHandlerContext, command, channel);
-                break;
             case DELETE:
                 handleDelete(channelHandlerContext, command, channel);
-                break;
-            case DECR:
-                handleDecr(channelHandlerContext, command, channel);
-                break;
-            case INCR:
-                handleIncr(channelHandlerContext, command, channel);
-                break;
-            case REPLACE:
-                handleReplace(channelHandlerContext, command, channel);
-                break;
-            case ADD:
-                handleAdd(channelHandlerContext, command, channel);
                 break;
             case SET:
                 handleSet(channelHandlerContext, command, channel);
                 break;
             case CAS:
                 handleCas(channelHandlerContext, command, channel);
-                break;
-            case STATS:
-                handleStats(channelHandlerContext, command, cmdKeysSize, channel);
-                break;
-            case VERSION:
-                handleVersion(channelHandlerContext, command, channel);
-                break;
-            case QUIT:
-                handleQuit(channel);
-                break;
-            case FLUSH_ALL:
-                handleFlush(channelHandlerContext, command, channel);
-                break;
-            case VERBOSITY:
-                handleVerbosity(channelHandlerContext, command, channel);
                 break;
             default:
                  throw new UnknownCommandException("unknown command");
@@ -201,71 +159,13 @@ public final class MemcachedCommandHandler<CACHE_ELEMENT extends CacheElement> e
         Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command));
     }
 
-    protected void handleFlush(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withFlushResponse(cache.flush_all(command.time)), channel.getRemoteAddress());
-    }
-    
-    protected void handleVerbosity(ChannelHandlerContext channelHandlerContext, CommandMessage command, Channel channel) {
-    	//TODO set verbosity mode
-    	Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command), channel.getRemoteAddress());
- 	}
-
-    protected void handleQuit(Channel channel) {
-        channel.disconnect();
-    }
-
-    protected void handleVersion(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        ResponseMessage responseMessage = new ResponseMessage(command);
-        responseMessage.version = version;
-        Channels.fireMessageReceived(channelHandlerContext, responseMessage, channel.getRemoteAddress());
-    }
-
-    protected void handleStats(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, int cmdKeysSize, Channel channel) {
-        String option = "";
-        if (cmdKeysSize > 0) {
-            option = command.keys.get(0).bytes.toString();
-        }
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withStatResponse(cache.stat(option)), channel.getRemoteAddress());
-    }
 
     protected void handleDelete(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
         Cache.DeleteResponse dr = cache.delete(command.keys.get(0), command.time);
         Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withDeleteResponse(dr), channel.getRemoteAddress());
     }
 
-    protected void handleDecr(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        Integer incrDecrResp = cache.get_add(command.keys.get(0), -1 * command.incrAmount);
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withIncrDecrResponse(incrDecrResp), channel.getRemoteAddress());
-    }
-
-    protected void handleIncr(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        Integer incrDecrResp = cache.get_add(command.keys.get(0), command.incrAmount); // TODO support default value and expiry!!
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withIncrDecrResponse(incrDecrResp), channel.getRemoteAddress());
-    }
-
-    protected void handlePrepend(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        Cache.StoreResponse ret;
-        ret = cache.prepend(command.element);
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withResponse(ret), channel.getRemoteAddress());
-    }
-
-    protected void handleAppend(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        Cache.StoreResponse ret;
-        ret = cache.append(command.element);
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withResponse(ret), channel.getRemoteAddress());
-    }
-
-    protected void handleReplace(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        Cache.StoreResponse ret;
-        ret = cache.replace(command.element);
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withResponse(ret), channel.getRemoteAddress());
-    }
-
-    protected void handleAdd(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
-        Cache.StoreResponse ret;
-        ret = cache.add(command.element);
-        Channels.fireMessageReceived(channelHandlerContext, new ResponseMessage(command).withResponse(ret), channel.getRemoteAddress());
-    }
+    
 
     protected void handleCas(ChannelHandlerContext channelHandlerContext, CommandMessage<CACHE_ELEMENT> command, Channel channel) {
         Cache.StoreResponse ret;

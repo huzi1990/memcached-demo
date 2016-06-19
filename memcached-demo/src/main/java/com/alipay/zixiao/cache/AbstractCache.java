@@ -91,7 +91,6 @@ public abstract class AbstractCache<CACHE_ELEMENT extends CacheElement> implemen
         multiSet(result, "rusage_system", "0:0");
         multiSet(result, "connection_structures", "0");
 
-        // TODO we could collect these stats
         multiSet(result, "bytes_read", "0");
         multiSet(result, "bytes_written", "0");
 

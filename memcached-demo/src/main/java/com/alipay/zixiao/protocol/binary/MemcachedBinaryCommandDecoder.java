@@ -18,40 +18,27 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 
 /**
+ * 二进制解码器
  */
 @ChannelHandler.Sharable
 public class MemcachedBinaryCommandDecoder extends FrameDecoder {
 
     public static final Charset USASCII = Charset.forName("US-ASCII");
 
+    /**
+     * 二进制对应枚举
+     */
     public static enum BinaryOp {
         Get(0x00, Op.GET, false),
         Set(0x01, Op.SET, false),
-        Add(0x02, Op.ADD, false),
-        Replace(0x03, Op.REPLACE, false),
         Delete(0x04, Op.DELETE, false),
-        Increment(0x05, Op.INCR, false),
-        Decrement(0x06, Op.DECR, false),
-        Quit(0x07, Op.QUIT, false),
-        Flush(0x08, Op.FLUSH_ALL, false),
         GetQ(0x09, Op.GET, false),
         Noop(0x0A, null, false),
-        Version(0x0B, Op.VERSION, false),
         GetK(0x0C, Op.GET, false, true),
         GetKQ(0x0D, Op.GET, true, true),
-        Append(0x0E, Op.APPEND, false),
-        Prepend(0x0F, Op.PREPEND, false),
-        Stat(0x10, Op.STATS, false),
         SetQ(0x11, Op.SET, true),
-        AddQ(0x12, Op.ADD, true),
-        ReplaceQ(0x13, Op.REPLACE, true),
-        DeleteQ(0x14, Op.DELETE, true),
-        IncrementQ(0x15, Op.INCR, true),
-        DecrementQ(0x16, Op.DECR, true),
-        QuitQ(0x17, Op.QUIT, true),
-        FlushQ(0x18, Op.FLUSH_ALL, true),
-        AppendQ(0x19, Op.APPEND, true),
-        PrependQ(0x1A, Op.PREPEND, true);
+        DeleteQ(0x14, Op.DELETE, true);
+
 
         public byte code;
         public Op correspondingOp;
@@ -85,7 +72,7 @@ public class MemcachedBinaryCommandDecoder extends FrameDecoder {
 
     protected Object decode(ChannelHandlerContext channelHandlerContext, Channel channel, ChannelBuffer channelBuffer) throws Exception {
 
-        // need at least 24 bytes, to get header
+        // 协议头必须满足不小于24
         if (channelBuffer.readableBytes() < 24) return null;
 
         // get the header
@@ -95,29 +82,30 @@ public class MemcachedBinaryCommandDecoder extends FrameDecoder {
 
         short magic = headerBuffer.readUnsignedByte();
 
-        // magic should be 0x80
+        // magic 值应该为 0x80
         if (magic != 0x80) {
             headerBuffer.resetReaderIndex();
 
             throw new MalformedCommandException("binary request payload is invalid, magic byte incorrect");
         }
 
+        //解析二进制协议头
         short opcode = headerBuffer.readUnsignedByte();
         short keyLength = headerBuffer.readShort();
         short extraLength = headerBuffer.readUnsignedByte();
-        short dataType = headerBuffer.readUnsignedByte();   // unused
-        short reserved = headerBuffer.readShort(); // unused
+        short dataType = headerBuffer.readUnsignedByte();
+        short reserved = headerBuffer.readShort();
         int totalBodyLength = headerBuffer.readInt();
         int opaque = headerBuffer.readInt();
         long cas = headerBuffer.readLong();
 
-        // we want the whole of totalBodyLength; otherwise, keep waiting.
+        // 读取内容
         if (channelBuffer.readableBytes() < totalBodyLength) {
             channelBuffer.resetReaderIndex();
             return null;
         }
 
-        // This assumes correct order in the enum. If that ever changes, we will have to scan for 'code' field.
+        // 将命令请求转换成handler处理的模型
         BinaryOp bcmd = BinaryOp.values()[opcode];
 
         Op cmdType = bcmd.correspondingOp;
@@ -127,11 +115,11 @@ public class MemcachedBinaryCommandDecoder extends FrameDecoder {
         cmdMessage.opaque = opaque;
         cmdMessage.addKeyToResponse = bcmd.addKeyToResponse;
 
-        // get extras. could be empty.
+        // 获得额外的内容
         ChannelBuffer extrasBuffer = ChannelBuffers.buffer(ByteOrder.BIG_ENDIAN, extraLength);
         channelBuffer.readBytes(extrasBuffer);
 
-        // get the key if any
+        // 获得key模型
         if (keyLength != 0) {
             ChannelBuffer keyBuffer = ChannelBuffers.buffer(ByteOrder.BIG_ENDIAN, keyLength);
             channelBuffer.readBytes(keyBuffer);
@@ -141,31 +129,28 @@ public class MemcachedBinaryCommandDecoder extends FrameDecoder {
 
             cmdMessage.keys = keys;
 
+            if (cmdType == Op.SET)
 
-            if (cmdType == Op.ADD ||
-                    cmdType == Op.SET ||
-                    cmdType == Op.REPLACE ||
-                    cmdType == Op.APPEND ||
-                    cmdType == Op.PREPEND)
             {
-                // TODO these are backwards from the spec, but seem to be what spymemcached demands -- which has the mistake?!
-                long expire = ((short) (extrasBuffer.capacity() != 0 ? extrasBuffer.readUnsignedShort() : 0)) * 1000;
-                short flags = (short) (extrasBuffer.capacity() != 0 ? extrasBuffer.readUnsignedShort() : 0);
+                //过期时间
+                long expire = ((short) (extrasBuffer.capacity() != 0 ?
+                        extrasBuffer.readUnsignedShort() :
+                        0)) * 1000;
+                //标记
+                short flags = (short) (extrasBuffer.capacity() != 0 ?
+                        extrasBuffer.readUnsignedShort() :
+                        0);
 
-                // the remainder of the message -- that is, totalLength - (keyLength + extraLength) should be the payload
+                // 内容
                 int size = totalBodyLength - keyLength - extraLength;
 
-                cmdMessage.element = new LocalCacheElement(new Key(keyBuffer.slice()), flags, expire != 0 && expire < CacheElement.THIRTY_DAYS ? LocalCacheElement.Now() + expire : expire, 0L);
+                cmdMessage.element = new LocalCacheElement(new Key(keyBuffer.slice()), flags,
+                        expire != 0 && expire < CacheElement.THIRTY_DAYS ?
+                                LocalCacheElement.Now() + expire :
+                                expire, 0L);
                 ChannelBuffer data = ChannelBuffers.buffer(size);
                 channelBuffer.readBytes(data);
                 cmdMessage.element.setData(data);
-            } else if (cmdType == Op.INCR || cmdType == Op.DECR) {
-                long initialValue = extrasBuffer.readUnsignedInt();
-                long amount = extrasBuffer.readUnsignedInt();
-                long expiration = extrasBuffer.readUnsignedInt();
-
-                cmdMessage.incrAmount = (int) amount;
-                cmdMessage.incrExpiry = (int) expiration;
             }
         }
 

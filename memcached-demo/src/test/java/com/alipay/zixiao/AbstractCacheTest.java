@@ -19,8 +19,9 @@ import java.util.Collection;
 /**
  */
 public abstract class AbstractCacheTest {
+
+
     protected static final int MAX_BYTES = (int) Bytes.valueOf("4m").bytes();
-    public static final int CEILING_SIZE = (int)Bytes.valueOf("4m").bytes();
     public static final int MAX_SIZE = 1000;
     protected       MemCacheServer<LocalCacheElement> daemon;
     private         int                               port;
@@ -32,8 +33,6 @@ public abstract class AbstractCacheTest {
     }
 
 
-
-
     public static enum ProtocolMode {
         TEXT, BINARY
     }
@@ -42,17 +41,14 @@ public abstract class AbstractCacheTest {
     public static Collection blockSizeValues() {
         return Arrays.asList(new Object[][] {
                 {  ProtocolMode.TEXT },
-                {  ProtocolMode.BINARY },
-//                { CacheType.BLOCK, 4, ProtocolMode.TEXT},
-//                { CacheType.BLOCK, 4, ProtocolMode.BINARY},
-//                { CacheType.MAPPED, 4, ProtocolMode.TEXT},
-//                { CacheType.MAPPED, 4, ProtocolMode.BINARY }
+//                {  ProtocolMode.BINARY }
+
         });
     }
 
     @Before
     public void setup() throws IOException {
-        // create daemon and start it
+        // 创建守护线程
         daemon = new MemCacheServer<LocalCacheElement>();
         CacheStorage<Key, LocalCacheElement> cacheStorage = ConcurrentLinkedHashMap
                 .create(ConcurrentLinkedHashMap.EvictionPolicy.FIFO, MAX_SIZE, MAX_BYTES);
@@ -70,20 +66,13 @@ public abstract class AbstractCacheTest {
 
 
     @After
-    public void teardown() {
+    public void teardown() throws Exception{
         if (daemon.isRunning())
             daemon.stop();
     }
 
 
 
-    public MemCacheServer getDaemon() {
-        return daemon;
-    }
-
-    public Cache getCache() {
-        return cache;
-    }
 
 
     public ProtocolMode getProtocolMode() {

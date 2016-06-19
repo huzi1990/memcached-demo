@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The payload object holding the parsed message.
+ * 传递命令信息
  */
 public final class CommandMessage<CACHE_ELEMENT extends CacheElement> implements Serializable {
 

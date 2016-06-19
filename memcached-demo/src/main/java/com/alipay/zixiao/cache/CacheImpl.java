@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.concurrent.*;
 
 /**
- * Default implementation of the cache handler, supporting local memory cache elements.
+ * 缓存的实现
  */
 public final class CacheImpl extends AbstractCache<LocalCacheElement> implements Cache<LocalCacheElement> {
 
@@ -17,9 +17,6 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
     final         DelayQueue<DelayedMCElement>         deleteQueue;
     private final ScheduledExecutorService             scavenger;
 
-    /**
-     * @inheritDoc
-     */
     public CacheImpl(CacheStorage<Key, LocalCacheElement> storage) {
         super();
         this.storage = storage;
@@ -33,22 +30,18 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
         }, 10, 2, TimeUnit.SECONDS);
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public DeleteResponse delete(Key key, int time) {
         boolean removed = false;
 
-        // delayed remove
+        // 延期删除
         if (time != 0) {
-            // block the element and schedule a delete; replace its entry with a blocked element
             LocalCacheElement placeHolder = new LocalCacheElement(key, 0, 0, 0L);
             placeHolder.setData(ChannelBuffers.buffer(0));
             placeHolder.block(Now() + (long)time);
 
             storage.replace(key, placeHolder);
 
-            // this must go on a queue for processing later...
             deleteQueue.add(new DelayedMCElement(placeHolder));
         } else
             removed = storage.remove(key) != null;
@@ -58,30 +51,24 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
 
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public StoreResponse add(LocalCacheElement e) {
         final long origCasUnique = e.getCasUnique();
         e.setCasUnique(casCounter.getAndIncrement());
         final boolean stored = storage.putIfAbsent(e.getKey(), e) == null;
-        // we should restore the former cas so that the object isn't left dirty
+        //没存储成功恢复原来计数
         if (!stored) {
             e.setCasUnique(origCasUnique);
         }
         return stored ? StoreResponse.STORED : StoreResponse.NOT_STORED;
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public StoreResponse replace(LocalCacheElement e) {
         return storage.replace(e.getKey(), e) != null ? StoreResponse.STORED : StoreResponse.NOT_STORED;
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public StoreResponse append(LocalCacheElement element) {
         LocalCacheElement old = storage.get(element.getKey());
         if (old == null || isBlocked(old) || isExpired(old)) {
@@ -93,9 +80,7 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
         }
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public StoreResponse prepend(LocalCacheElement element) {
         LocalCacheElement old = storage.get(element.getKey());
         if (old == null || isBlocked(old) || isExpired(old)) {
@@ -107,9 +92,7 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
         }
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public StoreResponse set(LocalCacheElement e) {
         setCmds.incrementAndGet();//update stats
 
@@ -120,11 +103,9 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
         return StoreResponse.STORED;
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public StoreResponse cas(Long cas_key, LocalCacheElement e) {
-        // have to get the element
+        // 查看是否存在元素
         LocalCacheElement element = storage.get(e.getKey());
         if (element == null || isBlocked(element)) {
             getMisses.incrementAndGet();
@@ -132,7 +113,7 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
         }
 
         if (element.getCasUnique() == cas_key) {
-            // casUnique matches, now set the element
+            // 命中
         	e.setCasUnique(casCounter.getAndIncrement());
             if (storage.replace(e.getKey(), element, e)) return StoreResponse.STORED;
             else {
@@ -140,14 +121,12 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
                 return StoreResponse.NOT_FOUND;
             }
         } else {
-            // cas didn't match; someone else beat us to it
+            // 并发处理,别的线程处理
             return StoreResponse.EXISTS;
         }
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public Integer get_add(Key key, int mod) {
         LocalCacheElement old = storage.get(key);
         if (old == null || isBlocked(old) || isExpired(old)) {
@@ -168,11 +147,9 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
         return e.getExpire() != 0 && e.getExpire() < Now();
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public LocalCacheElement[] get(Key ... keys) {
-        getCmds.incrementAndGet();//updates stats
+        getCmds.incrementAndGet();
 
         LocalCacheElement[] elements = new LocalCacheElement[keys.length];
         int x = 0;
@@ -199,65 +176,48 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
 
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public boolean flush_all() {
         return flush_all(0);
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public boolean flush_all(int expire) {
-        // TODO implement this, it isn't right... but how to handle efficiently? (don't want to linear scan entire cacheStorage)
         storage.clear();
         return true;
     }
 
-    /**
-     * @inheritDoc
-     */
+
     public void close() throws IOException {
         scavenger.shutdown();;
         storage.close();
     }
 
-    /**
-     * @inheritDoc
-     */
+
     @Override
     protected Set<Key> keys() {
         return storage.keySet();
     }
 
-    /**
-     * @inheritDoc
-     */
+
     @Override
     public long getCurrentItems() {
         return storage.size();
     }
 
-    /**
-     * @inheritDoc
-     */
+
     @Override
     public long getLimitMaxBytes() {
         return storage.getMemoryCapacity();
     }
 
-    /**
-     * @inheritDoc
-     */
+
     @Override
     public long getCurrentBytes() {
         return storage.getMemoryUsed();
     }
 
-    /**
-     * @inheritDoc
-     */
+
     @Override
     public void asyncEventPing() {
         DelayedMCElement toDelete = deleteQueue.poll();
@@ -267,9 +227,7 @@ public final class CacheImpl extends AbstractCache<LocalCacheElement> implements
     }
 
 
-    /**
-     * Delayed key blocks get processed occasionally.
-     */
+
     protected static class DelayedMCElement implements Delayed {
         private CacheElement element;
 

@@ -22,11 +22,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
+ * 操作枚举
  */
 public enum Op {
-    GET, GETS, APPEND, PREPEND, DELETE, DECR,
-    INCR, REPLACE, ADD, SET, CAS, STATS, VERSION,
-    QUIT, FLUSH_ALL, VERBOSITY;
+    GET, GETS,  DELETE,SET, CAS;
 
     private static Map<ChannelBuffer, Op> opsbf = new HashMap<ChannelBuffer, Op>();
 

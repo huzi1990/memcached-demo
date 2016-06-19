@@ -3,9 +3,7 @@ package com.alipay.zixiao.cache;
 import org.jboss.netty.buffer.ChannelBuffer;
 
 /**
- * Represents a given key for lookup in the cache.
- *
- * Wraps a byte array with a precomputed hashCode.
+ * 缓存的KEY对象
  */
 public class Key {
     public ChannelBuffer bytes;

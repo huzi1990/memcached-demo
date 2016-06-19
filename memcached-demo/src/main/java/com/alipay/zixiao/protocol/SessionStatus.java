@@ -3,12 +3,12 @@ package com.alipay.zixiao.protocol;
 import java.io.Serializable;
 
 /**
- * Class for holding the current session status.
+ * 目前的session状态
  */
 public final class SessionStatus implements Serializable {
 
     /**
-     * Possible states that the current session is in.
+     * 枚举
      */
     public static enum State {
         WAITING_FOR_DATA,
@@ -16,13 +16,13 @@ public final class SessionStatus implements Serializable {
         PROCESSING_MULTILINE,
     }
 
-    // the state the session is in
+    // 进入的session数量
     public State state;
 
-    // if we are waiting for more data, how much?
+    // 等待数据量
     public int bytesNeeded;
 
-    // the current working command
+
     public CommandMessage cmd;
 
 

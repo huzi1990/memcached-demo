@@ -59,7 +59,7 @@ public final class MemcachedCommandDecoder extends FrameDecoder {
         if (status.state == SessionStatus.State.READY) {
             ChannelBuffer in = buffer.slice();
 
-            // split into pieces
+            // 将命令解析
             List<ChannelBuffer> pieces = new ArrayList<ChannelBuffer>(6);
             if (in.readableBytes() < MIN_BYTES_LINE) return null;
             int pos = in.bytesBefore(CRLF_OR_WS);
@@ -81,7 +81,9 @@ public final class MemcachedCommandDecoder extends FrameDecoder {
                 return processLine(pieces, channel, ctx);
             }
             if (status.state != SessionStatus.State.WAITING_FOR_DATA) status.ready();
-        } else if (status.state == SessionStatus.State.WAITING_FOR_DATA) {
+        }
+        //获得多行输入结果
+        else if (status.state == SessionStatus.State.WAITING_FOR_DATA) {
             if (buffer.readableBytes() >= status.bytesNeeded + MemcachedResponseEncoder.CRLF.capacity()) {
 
                 // verify delimiter matches at the right location
@@ -157,59 +159,21 @@ public final class MemcachedCommandDecoder extends FrameDecoder {
                 }
 
                 return cmd;
-            case DECR:
-            case INCR:
-                // Malformed
-                if (numParts < MIN_BYTES_LINE || numParts > 3)
-                    throw new MalformedCommandException("invalid increment command");
 
-                cmd.setKey(parts.get(1));
-                cmd.incrAmount = BufferUtils.atoi(parts.get(MIN_BYTES_LINE));
-
-                if (numParts == 3 && parts.get(MIN_BYTES_LINE).equals(NOREPLY)) {
-                    cmd.noreply = true;
-                }
-
-                return cmd;
-            case FLUSH_ALL:
-                if (numParts >= 1) {
-                    if (parts.get(numParts - 1).equals(NOREPLY)) {
-                        cmd.noreply = true;
-                        if (numParts == 3)
-                            cmd.time = BufferUtils.atoi((parts.get(1)));
-                    } else if (numParts == MIN_BYTES_LINE)
-                        cmd.time = BufferUtils.atoi((parts.get(1)));
-                }
-                return cmd;
-            case VERBOSITY: // verbosity <time> [noreply]\r\n
-                // Malformed
-                if (numParts < MIN_BYTES_LINE || numParts > 3)
-                    throw new MalformedCommandException("invalid verbosity command");
-
-                cmd.time = BufferUtils.atoi((parts.get(1))); // verbose level
-
-                if (numParts > 1 && parts.get(MIN_BYTES_LINE).equals(NOREPLY))
-                    cmd.noreply = true;
-
-                return cmd;
-            case APPEND:
-            case PREPEND:
-            case REPLACE:
-            case ADD:
             case SET:
             case CAS:
-                // if we don't have all the parts, it's malformed
                 if (numParts < 5) {
                     throw new MalformedCommandException("invalid command length");
                 }
 
-                // Fill in all the elements of the command
+                //
                 int size = BufferUtils.atoi(parts.get(4));
+                //获得过期时间
                 long expire = BufferUtils.atoi(parts.get(3)) * 1000;
                 int flags = BufferUtils.atoi(parts.get(MIN_BYTES_LINE));
                 cmd.element = new LocalCacheElement(new Key(parts.get(1).slice()), flags, expire != 0 && expire < CacheElement.THIRTY_DAYS ? LocalCacheElement.Now() + expire : expire, 0L);
 
-                // look for cas and "noreply" elements
+                // 填充cas和noreply
                 if (numParts > 5) {
                     int noreply = op == Op.CAS ? 6 : 5;
                     if (op == Op.CAS) {
@@ -228,9 +192,6 @@ public final class MemcachedCommandDecoder extends FrameDecoder {
             //
             case GET:
             case GETS:
-            case STATS:
-            case VERSION:
-            case QUIT:
                 // Get all the keys
                 cmd.setKeys(parts.subList(1, numParts));
 

@@ -34,7 +34,7 @@ public final class MemcachedPipelineFactory implements ChannelPipelineFactory {
         this.idleTime = idleTime;
         this.frameSize = frameSize;
         this.channelGroup = channelGroup;
-        memcachedCommandHandler = new MemcachedCommandHandler(this.cache, this.version, this.verbose, this.idleTime, this.channelGroup);
+        memcachedCommandHandler = new MemcachedCommandHandler(this.cache, this.verbose, this.idleTime, this.channelGroup);
     }
 
     public final ChannelPipeline getPipeline() throws Exception {
